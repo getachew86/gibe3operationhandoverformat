@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIBE 3 Hydro Power Plant - Shift Handover</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCCM2N1o-OaOkKcUP-1SWiPWsWexHGYPk8",
+  authDomain: "gibe3operationhandoverformat.firebaseapp.com",
+  projectId: "gibe3operationhandoverformat",
+  storageBucket: "gibe3operationhandoverformat.firebasestorage.app",
+  messagingSenderId: "389715792755",
+  appId: "1:389715792755:web:e4edb431912d5e2aae6b06",
+  measurementId: "G-RDWPV0F7RW"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+        // ፎርሙ ሲላክ ዳታ ቤዝ ውስጥ ሴቭ ማድረጊያ ፕሮግራም
+        document.getElementById('handoverForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                date: document.getElementById('date').value,
+                plantLoading: { morning: document.getElementById('load_m').value, evening: document.getElementById('load_e').value, night: document.getElementById('load_n').value },
+                unitsOp: { morning: document.getElementById('op_m').value, evening: document.getElementById('op_e').value, night: document.getElementById('op_n').value },
+                unitsMaint: { morning: document.getElementById('maint_m').value, evening: document.getElementById('maint_e').value, night: document.getElementById('maint_n').value },
+                stoppedUnits: { morning: document.getElementById('stop_m').value, evening: document.getElementById('stop_e').value, night: document.getElementById('stop_n').value },
+                busbar: { morning: document.getElementById('bus_m').value, evening: document.getElementById('bus_e').value, night: document.getElementById('bus_n').value },
+                dgCondition: { morning: document.getElementById('dg_m').value, evening: document.getElementById('dg_e').value, night: document.getElementById('dg_n').value },
+                dcSystem: { morning: document.getElementById('dc_m').value, evening: document.getElementById('dc_e').value, night: document.getElementById('dc_n').value },
+                scada: { morning: document.getElementById('scada_m').value, evening: document.getElementById('scada_e').value, night: document.getElementById('scada_n').value },
+                plcPhone: { morning: document.getElementById('plc_m').value, evening: document.getElementById('plc_e').value, night: document.getElementById('plc_n').value },
+                tools: { morning: document.getElementById('tools_m').value, evening: document.getElementById('tools_e').value, night: document.getElementById('tools_n').value },
+                remark: document.getElementById('remark').value,
+                // Signatures
+                morning_att_name: document.getElementById('m_att_name').value, morning_att_group: document.getElementById('m_att_group').value,
+                morning_add_name: document.getElementById('m_add_name').value, morning_add_group: document.getElementById('m_add_group').value,
+                evening_att_name: document.getElementById('e_att_name').value, evening_att_group: document.getElementById('e_att_group').value,
+                evening_add_name: document.getElementById('e_add_name').value, evening_add_group: document.getElementById('e_add_group').value,
+                night_att_name: document.getElementById('n_att_name').value, night_att_group: document.getElementById('n_att_group').value,
+                night_add_name: document.getElementById('n_add_name').value, night_add_group: document.getElementById('n_add_group').value,
+                createdAt: new Date()
+            };
+
+            try {
+                await addDoc(collection(db, "handovers"), formData);
+                alert("መረጃው በስኬት ተመዝግቧል!");
+                location.reload();
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                alert("ስህተት ተከስቷል፣ እባክዎ እንደገና ይሞክሩ።");
+            }
+        });
+
+        // የተሞሉ ዳታዎችን ከዳታቤዝ አምጥቶ ማሳያ ፕሮግራም
+        async function loadData() {
+            const q = query(collection(db, "handovers"), orderBy("createdAt", "desc"));
+            const querySnapshot = await getDocs(q);
+            const container = document.getElementById('historyData');
+            container.innerHTML = '';
+
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const row = `
+                    <div class="bg-gray-50 p-4 rounded-lg border mb-4 text-sm shadow-sm">
+                        <p class="font-bold text-blue-600 mb-2">ቀን: ${data.date}</p>
+                        <table class="w-full text-left border-collapse border border-gray-300 mb-2">
+                            <thead>
+                                <tr class="bg-gray-200">
+                                    <th class="border p-1">መግለጫ (Description)</th>
+                                    <th class="border p-1">Morning</th>
+                                    <th class="border p-1">Evening</th>
+                                    <th class="border p-1">Night</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td class="border p-1 font-semibold">Total plant loading</td><td class="border p-1">${data.plantLoading.morning}</td><td class="border p-1">${data.plantLoading.evening}</td><td class="border p-1">${data.plantLoading.night}</td></tr>
+                                <tr><td class="border p-1 font-semibold">No.of units in operation</td><td class="border p-1">${data.unitsOp.morning}</td><td class="border p-1">${data.unitsOp.evening}</td><td class="border p-1">${data.unitsOp.night}</td></tr>
+                                <tr><td class="border p-1 font-semibold">No.of units under maintenance</td><td class="border p-1">${data.unitsMaint.morning}</td><td class="border p-1">${data.unitsMaint.evening}</td><td class="border p-1">${data.unitsMaint.night}</td></tr>
+                                <tr><td class="border p-1 font-semibold">Stopped units</td><td class="border p-1">${data.stoppedUnits.morning}</td><td class="border p-1">${data.stoppedUnits.evening}</td><td class="border p-1">${data.stoppedUnits.night}</td></tr>
+                                <tr><td class="border p-1 font-semibold">Bus-bar & Lines</td><td class="border p-1">${data.busbar.morning}</td><td class="border p-1">${data.busbar.evening}</td><td class="border p-1">${data.busbar.night}</td></tr>
+                                <tr><td class="border p-1 font-semibold">Stand by DG</td><td class="border p-1">${data.dgCondition.morning}</td><td class="border p-1">${data.dgCondition.evening}</td><td class="border p-1">${data.dgCondition.night}</td></tr>
+                                <tr><td class="border p-1 font-semibold">Plant DC System</td><td class="border p-1">${data.dcSystem.morning}</td><td class="border p-1">${data.dcSystem.evening}</td><td class="border p-1">${data.dcSystem.night}</td></tr>
+                                <tr><td class="border p-1 font-semibold">SCADA & MIMIC</td><td class="border p-1">${data.scada.morning}</td><td class="border p-1">${data.scada.evening}</td><td class="border p-1">${data.scada.night}</td></tr>
+                                <tr><td class="border p-1 font-semibold">PLC/Phone</td><td class="border p-1">${data.plcPhone.morning}</td><td class="border p-1">${data.plcPhone.evening}</td><td class="border p-1">${data.plcPhone.night}</td></tr>
+                                <tr><td class="border p-1 font-semibold">Tools & Utilities</td><td class="border p-1">${data.tools.morning}</td><td class="border p-1">${data.tools.evening}</td><td class="border p-1">${data.tools.night}</td></tr>
+                            </tbody>
+                        </table>
+                        <p class="mb-2"><strong>Remark:</strong> ${data.remark}</p>
+                        <div class="grid grid-cols-3 gap-2 bg-blue-50 p-2 rounded text-xs">
+                            <div><strong>Morning:</strong> Att: ${data.morning_att_name} (${data.morning_att_group}) | Add: ${data.morning_add_name}</div>
+                            <div><strong>Evening:</strong> Att: ${data.evening_att_name} (${data.evening_att_group}) | Add: ${data.evening_add_name}</div>
+                            <div><strong>Night:</strong> Att: ${data.night_att_name} (${data.night_att_group}) | Add: ${data.night_add_name}</div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += row;
+            });
+        }
+        window.onload = loadData;
+    </script>
+</head>
+<body class="bg-gray-100 p-4 font-sans">
+    <div class="max-w-5xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+        <h2 class="text-xl font-bold text-center text-blue-800 mb-2">GIBE 3 HYDRO POWER PLANT</h2>
+        <h3 class="text-md text-center font-semibold text-gray-600 mb-6">Real time operation shift taking-over form</h3>
+        
+        <form id="handoverForm" class="space-y-6">
+            <div class="flex items-center space-x-2">
+                <label class="font-bold">ቀን (Date):</label>
+                <input type="date" id="date" required class="border p-1 rounded">
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse border border-gray-300">
+                    <thead>
+                        <tr class="bg-blue-800 text-white text-sm">
+                            <th class="border p-2 w-12 text-center">S.No</th>
+                            <th class="border p-2">Description / Information transferred</th>
+                            <th class="border p-2 text-center">Morning @13:00</th>
+                            <th class="border p-2 text-center">Evening @20:00</th>
+                            <th class="border p-2 text-center">Night @06:00</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-sm">
+                        <tr>
+                            <td class="border p-2 text-center">1</td>
+                            <td class="border p-2 font-semibold">Total plant loading</td>
+                            <td class="border p-1"><input type="text" id="load_m" class="w-full border p-1 rounded" required></td>
+                            <td class="border p-1"><input type="text" id="load_e" class="w-full border p-1 rounded" required></td>
+                            <td class="border p-1"><input type="text" id="load_n" class="w-full border p-1 rounded" required></td>
+                        </tr>
+                        <tr>
+                            <td class="border p-2 text-center">2</td>
+                            <td class="border p-2 font-semibold">No.of units in operation</td>
+                            <td class="border p-1"><input type="text" id="op_m" class="w-full border p-1 rounded" required></td>
+                            <td class="border p-1"><input type="text" id="op_e" class="w-full border p-1 rounded" required></td>
+                            <td class="border p-1"><input type="text" id="op_n" class="w-full border p-1 rounded" required></td>
+                        </tr>
+                        <tr>
+                            <td class="border p-2 text-center">3</td>
+                            <td class="border p-2 font-semibold">No.of units under maintenance</td>
+                            <td class="border p-1"><input type="text" id="maint_m" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="maint_e" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="maint_n" class="w-full border p-1 rounded"></td>
+                        </tr>
+                        <tr>
+                            <td class="border p-2 text-center">4</td>
+                            <td class="border p-2 font-semibold">Stopped units</td>
+                            <td class="border p-1"><input type="text" id="stop_m" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="stop_e" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="stop_n" class="w-full border p-1 rounded"></td>
+                        </tr>
+                        <tr>
+                            <td class="border p-2 text-center">5</td>
+                            <td class="border p-2 font-semibold">Bus-bar, overhead and outgoing lines</td>
+                            <td class="border p-1"><input type="text" id="bus_m" placeholder="Yes/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="bus_e" placeholder="Yes/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="bus_n" placeholder="Yes/Problem" class="w-full border p-1 rounded"></td>
+                        </tr>
+                        <tr>
+                            <td class="border p-2 text-center">6</td>
+                            <td class="border p-2 font-semibold">Stand by DG Condition</td>
+                            <td class="border p-1"><input type="text" id="dg_m" placeholder="Ready/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="dg_e" placeholder="Ready/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="dg_n" placeholder="Ready/Problem" class="w-full border p-1 rounded"></td>
+                        </tr>
+                        <tr>
+                            <td class="border p-2 text-center">7</td>
+                            <td class="border p-2 font-semibold">Plant DC system condition</td>
+                            <td class="border p-1"><input type="text" id="dc_m" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="dc_e" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="dc_n" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
+                        </tr>
+                        <tr>
+                            <td class="border p-2 text-center">8</td>
+                            <td class="border p-2 font-semibold">Conditions of SCADA & MIMIC</td>
+                            <td class="border p-1"><input type="text" id="scada_m" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="scada_e" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="scada_n" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
+                        </tr>
+                        <tr>
+                            <td class="border p-2 text-center">9</td>
+                            <td class="border p-2 font-semibold">PLC /fixed phone condition</td>
+                            <td class="border p-1"><input type="text" id="plc_m" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="plc_e" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="plc_n" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
+                        </tr>
+                        <tr>
+                            <td class="border p-2 text-center">10</td>
+                            <td class="border p-2 font-semibold">Availability of tools and utilities</td>
+                            <td class="border p-1"><input type="text" id="tools_m" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="tools_e" class="w-full border p-1 rounded"></td>
+                            <td class="border p-1"><input type="text" id="tools_n" class="w-full border p-1 rounded"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div>
+                <label class="block font-bold mb-1">11. Any remark which require the next group members:</label>
+                <textarea id="remark" class="w-full border p-2 rounded" rows="3"></textarea>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded border">
+                <div class="space-y-2">
+                    <h4 class="font-bold text-blue-700 border-b pb-1">Morning Shift</h4>
+                    <div><label class="text-xs">Attended By Name:</label><input type="text" id="m_att_name" class="w-full border p-1 text-sm rounded"></div>
+                    <div><label class="text-xs">Group:</label><input type="text" id="m_att_group" class="w-full border p-1 text-sm rounded"></div>
+                    <div><label class="text-xs">Addressed To Name:</label><input type="text" id="m_add_name" class="w-full border p-1 text-sm rounded"></div>
+                    <div><label class="text-xs">Group:</label><input type="text" id="m_add_group" class="w-full border p-1 text-sm rounded"></div>
+                </div>
+                <div class="space-y-2">
+                    <h4 class="font-bold text-blue-700 border-b pb-1">Evening Shift</h4>
+                    <div><label class="text-xs">Attended By Name:</label><input type="text" id="e_att_name" class="w-full border p-1 text-sm rounded"></div>
+                    <div><label class="text-xs">Group:</label><input type="text" id="e_att_group" class="w-full border p-1 text-sm rounded"></div>
+                    <div><label class="text-xs">Addressed To Name:</label><input type="text" id="e_add_name" class="w-full border p-1 text-sm rounded"></div>
+                    <div><label class="text-xs">Group:</label><input type="text" id="e_add_group" class="w-full border p-1 text-sm rounded"></div>
+                </div>
+                <div class="space-y-2">
+                    <h4 class="font-bold text-blue-700 border-b pb-1">Night Shift</h4>
+                    <div><label class="text-xs">Attended By Name:</label><input type="text" id="n_att_name" class="w-full border p-1 text-sm rounded"></div>
+                    <div><label class="text-xs">Group:</label><input type="text" id="n_att_group" class="w-full border p-1 text-sm rounded"></div>
+                    <div><label class="text-xs">Addressed To Name:</label><input type="text" id="n_add_name" class="w-full border p-1 text-sm rounded"></div>
+                    <div><label class="text-xs">Group:</label><input type="text" id="n_add_group" class="w-full border p-1 text-sm rounded"></div>
+                </div>
+            </div>
+
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200">Submit Handover Report</button>
+        </form>
+
+        <div class="mt-12">
+            <h3 class="text-lg font-bold text-gray-700 mb-4 border-b pb-2">Submitted Reports History (የተሞሉ ሪፖርቶች ታሪክ)</h3>
+            <div id="historyData" class="space-y-4">
+                <p class="text-gray-500 text-sm">Loading history...</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
