@@ -21,7 +21,7 @@
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+const db = getFirestore(app);
 
         // ፎርሙ ሲላክ ዳታ ቤዝ ውስጥ ሴቭ ማድረጊያ ፕሮግራም
         document.getElementById('handoverForm').addEventListener('submit', async (e) => {
