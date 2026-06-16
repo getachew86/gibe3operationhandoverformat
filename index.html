@@ -3,27 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GIBE 3 Hydro Power Plant - Shift Handover</title>
+    <title>GIBE 3 Hydro Power Plant - Enterprise Shift Handover</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
+        // የፊልድ Firebase Config
         const firebaseConfig = {
-  apiKey: "AIzaSyCCM2N1o-OaOkKcUP-1SWiPWsWexHGYPk8",
-  authDomain: "gibe3operationhandoverformat.firebaseapp.com",
-  projectId: "gibe3operationhandoverformat",
-  storageBucket: "gibe3operationhandoverformat.firebasestorage.app",
-  messagingSenderId: "389715792755",
-  appId: "1:389715792755:web:e4edb431912d5e2aae6b06",
-  measurementId: "G-RDWPV0F7RW"
-};
+            apiKey: "AIzaSyCCM2N1o-OaOkKcUP-1SWiPWsWexHGYPk8",
+            authDomain: "gibe3operationhandoverformat.firebaseapp.com",
+            projectId: "gibe3operationhandoverformat",
+            storageBucket: "gibe3operationhandoverformat.firebasestorage.app",
+            messagingSenderId: "389715792755",
+            appId: "1:389715792755:web:e4edb431912d5e2aae6b06",
+            measurementId: "G-RDWPV0F7RW"
+        };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
 
-        // ፎርሙ ሲላክ ዳታ ቤዝ ውስጥ ሴቭ ማድረጊያ ፕሮግራም
+        let allReports = [];
+        let editingDocId = null;
+
+        // AUTHENTICATION GUARD & STATE CHANGE
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('mainAppSection').classList.remove('hidden');
+                document.getElementById('userDisplay').innerText = `Logged in as: ${user.email}`;
+                loadData();
+            } else {
+                document.getElementById('loginSection').classList.remove('hidden');
+                document.getElementById('mainAppSection').classList.add('hidden');
+            }
+        });
+
+        // LOGIN SYSTEM
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const pass = document.getElementById('loginPassword').value;
+            const errorMsg = document.getElementById('loginError');
+            errorMsg.innerText = "";
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+            } catch (err) {
+                errorMsg.innerText = "የተሳሳተ ኢሜይል ወይም የይለፍ ቃል! እባክዎ እንደገና ይሞክሩ።";
+            }
+        });
+
+        // LOGOUT SYSTEM
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            signOut(auth);
+        });
+
+        // FORM SUBMISSION (CREATE OR UPDATE)
         document.getElementById('handoverForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -40,209 +81,386 @@ const db = getFirestore(app);
                 plcPhone: { morning: document.getElementById('plc_m').value, evening: document.getElementById('plc_e').value, night: document.getElementById('plc_n').value },
                 tools: { morning: document.getElementById('tools_m').value, evening: document.getElementById('tools_e').value, night: document.getElementById('tools_n').value },
                 remark: document.getElementById('remark').value,
-                // Signatures
                 morning_att_name: document.getElementById('m_att_name').value, morning_att_group: document.getElementById('m_att_group').value,
                 morning_add_name: document.getElementById('m_add_name').value, morning_add_group: document.getElementById('m_add_group').value,
                 evening_att_name: document.getElementById('e_att_name').value, evening_att_group: document.getElementById('e_att_group').value,
                 evening_add_name: document.getElementById('e_add_name').value, evening_add_group: document.getElementById('e_add_group').value,
                 night_att_name: document.getElementById('n_att_name').value, night_att_group: document.getElementById('n_att_group').value,
                 night_add_name: document.getElementById('n_add_name').value, night_add_group: document.getElementById('n_add_group').value,
-                createdAt: new Date()
+                updatedAt: new Date()
             };
 
             try {
-                await addDoc(collection(db, "handovers"), formData);
-                alert("መረጃው በስኬት ተመዝግቧል!");
-                location.reload();
+                if (editingDocId) {
+                    await updateDoc(doc(db, "handovers", editingDocId), formData);
+                    alert("ሪፖርቱ በስኬት ተስተካክሏል!");
+                    cancelEdit();
+                } else {
+                    formData.createdAt = new Date();
+                    await addDoc(collection(db, "handovers"), formData);
+                    alert("ሪፖርቱ በስኬት ተመዝግቧል!");
+                }
+                document.getElementById('handoverForm').reset();
+                loadData();
             } catch (error) {
-                console.error("Error adding document: ", error);
-                alert("ስህተት ተከስቷል፣ እባክዎ እንደገና ይሞክሩ።");
+                console.error(error);
+                alert("ስህተት ተከስቷል!");
             }
         });
 
-        // የተሞሉ ዳታዎችን ከዳታቤዝ አምጥቶ ማሳያ ፕሮግራም
+        // FETCH DATA FROM FIRESTORE
         async function loadData() {
-            const q = query(collection(db, "handovers"), orderBy("createdAt", "desc"));
+            const q = query(collection(db, "handovers"), orderBy("date", "desc"));
             const querySnapshot = await getDocs(q);
+            allReports = [];
+            querySnapshot.forEach((doc) => {
+                allReports.push({ id: doc.id, ...doc.data() });
+            });
+            renderHistory(allReports);
+        }
+
+        // RENDER METHOD FOR HISTORY CARD LIST
+        window.renderHistory = function(reports) {
             const container = document.getElementById('historyData');
             container.innerHTML = '';
+            if(reports.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-4">ምንም ተዛማጅ ሪፖርት አልተገኘም!</p>';
+                return;
+            }
 
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
+            reports.forEach((data) => {
                 const row = `
-                    <div class="bg-gray-50 p-4 rounded-lg border mb-4 text-sm shadow-sm">
-                        <p class="font-bold text-blue-600 mb-2">ቀን: ${data.date}</p>
-                        <table class="w-full text-left border-collapse border border-gray-300 mb-2">
-                            <thead>
-                                <tr class="bg-gray-200">
-                                    <th class="border p-1">መግለጫ (Description)</th>
-                                    <th class="border p-1">Morning</th>
-                                    <th class="border p-1">Evening</th>
-                                    <th class="border p-1">Night</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr><td class="border p-1 font-semibold">Total plant loading</td><td class="border p-1">${data.plantLoading.morning}</td><td class="border p-1">${data.plantLoading.evening}</td><td class="border p-1">${data.plantLoading.night}</td></tr>
-                                <tr><td class="border p-1 font-semibold">No.of units in operation</td><td class="border p-1">${data.unitsOp.morning}</td><td class="border p-1">${data.unitsOp.evening}</td><td class="border p-1">${data.unitsOp.night}</td></tr>
-                                <tr><td class="border p-1 font-semibold">No.of units under maintenance</td><td class="border p-1">${data.unitsMaint.morning}</td><td class="border p-1">${data.unitsMaint.evening}</td><td class="border p-1">${data.unitsMaint.night}</td></tr>
-                                <tr><td class="border p-1 font-semibold">Stopped units</td><td class="border p-1">${data.stoppedUnits.morning}</td><td class="border p-1">${data.stoppedUnits.evening}</td><td class="border p-1">${data.stoppedUnits.night}</td></tr>
-                                <tr><td class="border p-1 font-semibold">Bus-bar & Lines</td><td class="border p-1">${data.busbar.morning}</td><td class="border p-1">${data.busbar.evening}</td><td class="border p-1">${data.busbar.night}</td></tr>
-                                <tr><td class="border p-1 font-semibold">Stand by DG</td><td class="border p-1">${data.dgCondition.morning}</td><td class="border p-1">${data.dgCondition.evening}</td><td class="border p-1">${data.dgCondition.night}</td></tr>
-                                <tr><td class="border p-1 font-semibold">Plant DC System</td><td class="border p-1">${data.dcSystem.morning}</td><td class="border p-1">${data.dcSystem.evening}</td><td class="border p-1">${data.dcSystem.night}</td></tr>
-                                <tr><td class="border p-1 font-semibold">SCADA & MIMIC</td><td class="border p-1">${data.scada.morning}</td><td class="border p-1">${data.scada.evening}</td><td class="border p-1">${data.scada.night}</td></tr>
-                                <tr><td class="border p-1 font-semibold">PLC/Phone</td><td class="border p-1">${data.plcPhone.morning}</td><td class="border p-1">${data.plcPhone.evening}</td><td class="border p-1">${data.plcPhone.night}</td></tr>
-                                <tr><td class="border p-1 font-semibold">Tools & Utilities</td><td class="border p-1">${data.tools.morning}</td><td class="border p-1">${data.tools.evening}</td><td class="border p-1">${data.tools.night}</td></tr>
-                            </tbody>
-                        </table>
-                        <p class="mb-2"><strong>Remark:</strong> ${data.remark}</p>
-                        <div class="grid grid-cols-3 gap-2 bg-blue-50 p-2 rounded text-xs">
-                            <div><strong>Morning:</strong> Att: ${data.morning_att_name} (${data.morning_att_group}) | Add: ${data.morning_add_name}</div>
-                            <div><strong>Evening:</strong> Att: ${data.evening_att_name} (${data.evening_att_group}) | Add: ${data.evening_add_name}</div>
-                            <div><strong>Night:</strong> Att: ${data.night_att_name} (${data.night_att_group}) | Add: ${data.night_add_name}</div>
+                    <div id="print-area-${data.id}" class="bg-white p-6 rounded-xl border border-gray-200 mb-6 shadow-md relative group hover:shadow-lg transition">
+                        <div class="absolute top-4 right-4 flex space-x-2 no-print">
+                            <button onclick="printSingleReport('${data.id}')" class="bg-gray-100 text-gray-700 hover:bg-blue-600 hover:text-white p-2 rounded-lg text-xs font-semibold transition" title="Print This Report">
+                                <i class="fa fa-print"></i>
+                            </button>
+                            <button onclick="exportSinglePDF('${data.id}')" class="bg-gray-100 text-red-600 hover:bg-red-600 hover:text-white p-2 rounded-lg text-xs font-semibold transition" title="Export PDF">
+                                <i class="fa-file-pdf far"></i>
+                            </button>
+                            <button onclick="editReport('${data.id}')" class="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white p-2 rounded-lg text-xs font-semibold transition" title="Edit">
+                                <i class="fa fa-edit"></i>
+                            </button>
+                            <button onclick="deleteReport('${data.id}')" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white p-2 rounded-lg text-xs font-semibold transition" title="Delete">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+
+                        <div class="text-center mb-4 hidden print-only">
+                            <h2 class="text-xl font-bold text-blue-900">GIBE 3 HYDRO POWER PLANT</h2>
+                            <h3 class="text-sm font-semibold text-gray-600">Real time operation shift taking-over form</h3>
+                        </div>
+
+                        <p class="font-bold text-blue-700 text-base mb-3"><i class="fa fa-calendar-alt mr-2"></i>ቀን (Date): <span class="underline">${data.date}</span></p>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse border border-gray-300 mb-4 text-xs md:text-sm">
+                                <thead>
+                                    <tr class="bg-gray-100 text-gray-800">
+                                        <th class="border p-2 font-bold">መግለጫ (Description)</th>
+                                        <th class="border p-2 text-center bg-blue-50/50">Morning @13:00</th>
+                                        <th class="border p-2 text-center bg-orange-50/50">Evening @20:00</th>
+                                        <th class="border p-2 text-center bg-purple-50/50">Night @06:00</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">Total plant loading</td><td class="border p-2 text-center">${data.plantLoading.morning}</td><td class="border p-2 text-center">${data.plantLoading.evening}</td><td class="border p-2 text-center">${data.plantLoading.night}</td></tr>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">No.of units in operation</td><td class="border p-2 text-center">${data.unitsOp.morning}</td><td class="border p-2 text-center">${data.unitsOp.evening}</td><td class="border p-2 text-center">${data.unitsOp.night}</td></tr>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">No.of units under maintenance</td><td class="border p-2 text-center">${data.unitsMaint.morning || '-'}</td><td class="border p-2 text-center">${data.unitsMaint.evening || '-'}</td><td class="border p-2 text-center">${data.unitsMaint.night || '-'}</td></tr>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">Stopped units</td><td class="border p-2 text-center">${data.stoppedUnits.morning || '-'}</td><td class="border p-2 text-center">${data.stoppedUnits.evening || '-'}</td><td class="border p-2 text-center">${data.stoppedUnits.night || '-'}</td></tr>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">Bus-bar & Lines</td><td class="border p-2 text-center">${data.busbar.morning || '-'}</td><td class="border p-2 text-center">${data.busbar.evening || '-'}</td><td class="border p-2 text-center">${data.busbar.night || '-'}</td></tr>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">Stand by DG</td><td class="border p-2 text-center">${data.dgCondition.morning || '-'}</td><td class="border p-2 text-center">${data.dgCondition.evening || '-'}</td><td class="border p-2 text-center">${data.dgCondition.night || '-'}</td></tr>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">Plant DC System</td><td class="border p-2 text-center">${data.dcSystem.morning || '-'}</td><td class="border p-2 text-center">${data.dcSystem.evening || '-'}</td><td class="border p-2 text-center">${data.dcSystem.night || '-'}</td></tr>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">SCADA & MIMIC</td><td class="border p-2 text-center">${data.scada.morning || '-'}</td><td class="border p-2 text-center">${data.scada.evening || '-'}</td><td class="border p-2 text-center">${data.scada.night || '-'}</td></tr>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">PLC/Phone</td><td class="border p-2 text-center">${data.plcPhone.morning || '-'}</td><td class="border p-2 text-center">${data.plcPhone.evening || '-'}</td><td class="border p-2 text-center">${data.plcPhone.night || '-'}</td></tr>
+                                    <tr><td class="border p-2 font-semibold bg-gray-50/50">Tools & Utilities</td><td class="border p-2 text-center">${data.tools.morning || '-'}</td><td class="border p-2 text-center">${data.tools.evening || '-'}</td><td class="border p-2 text-center">${data.tools.night || '-'}</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="mb-3 p-2 bg-yellow-50 border-l-4 border-yellow-400 text-sm"><strong><i class="fa fa-comment-alt mr-1 text-gray-600"></i> Remark:</strong> ${data.remark || 'ምንም አስተያየት የለም'}</p>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 bg-gray-50 p-3 rounded-lg border text-xs">
+                            <div class="border-b md:border-b-0 md:border-r pb-2 md:pb-0 pr-2"><strong>Morning Shift:</strong><br> Att: ${data.morning_att_name || '-'} (${data.morning_att_group || '-'})<br>To: ${data.morning_add_name || '-'} (${data.morning_add_group || '-'})</div>
+                            <div class="border-b md:border-b-0 md:border-r pb-2 md:pb-0 px-0 md:px-2"><strong>Evening Shift:</strong><br> Att: ${data.evening_att_name || '-'} (${data.evening_att_group || '-'})<br>To: ${data.evening_add_name || '-'} (${data.evening_add_group || '-'})</div>
+                            <div class="px-0 md:px-2"><strong>Night Shift:</strong><br> Att: ${data.night_att_name || '-'} (${data.night_att_group || '-'})<br>To: ${data.night_add_name || '-'} (${data.night_add_group || '-'})</div>
                         </div>
                     </div>
                 `;
                 container.innerHTML += row;
             });
         }
-        window.onload = loadData;
+
+        // LIVE LIVE SEARCH & DATE FILTER COMBINED
+        window.filterReports = function() {
+            const searchVal = document.getElementById('searchBox').value.toLowerCase();
+            const filterDate = document.getElementById('filterDate').value;
+
+            const filtered = allReports.filter(report => {
+                const matchesSearch = report.date.includes(searchVal) || 
+                                      (report.remark && report.remark.toLowerCase().includes(searchVal)) ||
+                                      report.morning_att_name.toLowerCase().includes(searchVal) ||
+                                      report.evening_att_name.toLowerCase().includes(searchVal) ||
+                                      report.night_att_name.toLowerCase().includes(searchVal);
+                const matchesDate = filterDate ? report.date === filterDate : true;
+                return matchesSearch && matchesDate;
+            });
+            renderHistory(filtered);
+        }
+
+        // ADMIN DELETE FUNCTION
+        window.deleteReport = async function(id) {
+            if(confirm("እርግጠኛ ነዎት ይህንን የፈረቃ ማረካከቢያ ሪፖርት ማጥፋት ይፈልጋሉ?")) {
+                try {
+                    await deleteDoc(doc(db, "handovers", id));
+                    alert("ሪፖርቱ ተሰርዟል!");
+                    loadData();
+                } catch (err) {
+                    alert("ማጥፋት አልተቻለም፣ ስህተት አለ!");
+                }
+            }
+        }
+
+        // ADMIN EDIT POPULATION
+        window.editReport = function(id) {
+            const data = allReports.find(r => r.id === id);
+            if(!data) return;
+
+            editingDocId = id;
+            document.getElementById('formActionTitle').innerText = "ሪፖርት ማስተካከያ (Editing Mode)";
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+            
+            // Populate basic fields
+            document.getElementById('date').value = data.date;
+            document.getElementById('remark').value = data.remark || "";
+
+            // Populate shifts row values
+            const subObjects = ['plantLoading', 'unitsOp', 'unitsMaint', 'stoppedUnits', 'busbar', 'dgCondition', 'dcSystem', 'scada', 'plcPhone', 'tools'];
+            const idPrefixes = ['load', 'op', 'maint', 'stop', 'bus', 'dg', 'dc', 'scada', 'plc', 'tools'];
+            const shifts = ['morning', 'evening', 'night'];
+            const shiftChars = ['m', 'e', 'n'];
+
+            subObjects.forEach((objName, index) => {
+                shifts.forEach((shift, sIdx) => {
+                    const inputId = `${idPrefixes[index]}_${shiftChars[sIdx]}`;
+                    if(data[objName] && data[objName][shift]) {
+                        document.getElementById(inputId).value = data[objName][shift];
+                    }
+                });
+            });
+
+            // Signatures
+            const sigs = ['m_att_name', 'm_att_group', 'm_add_name', 'm_add_group', 'e_att_name', 'e_att_group', 'e_add_name', 'e_add_group', 'n_att_name', 'n_att_group', 'n_add_name', 'n_add_group'];
+            sigs.forEach(f => {
+                const dbKey = f.replace('m_', 'morning_').replace('e_', 'evening_').replace('n_', 'night_');
+                document.getElementById(f).value = data[dbKey] || "";
+            });
+
+            // Scroll to view form top
+            document.getElementById('handoverForm').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        window.cancelEdit = function() {
+            editingDocId = null;
+            document.getElementById('formActionTitle').innerText = "Real time operation shift taking-over form";
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+            document.getElementById('handoverForm').reset();
+        }
+
+        // EXCEL FULL DATABASE EXPORT
+        window.exportToExcel = function() {
+            if(allReports.length === 0) return alert("ምንም ዳታ የለም!");
+            
+            const flattenedData = allReports.map((r, i) => ({
+                "No": i+1,
+                "Date": r.date,
+                "Plant Load (M/E/N)": `${r.plantLoading.morning} / ${r.plantLoading.evening} / ${r.plantLoading.night}`,
+                "Units Op (M/E/N)": `${r.unitsOp.morning} / ${r.unitsOp.evening} / ${r.unitsOp.night}`,
+                "Units Maint (M/E/N)": `${r.unitsMaint.morning} / ${r.unitsMaint.evening} / ${r.unitsMaint.night}`,
+                "Stopped Units (M/E/N)": `${r.stoppedUnits.morning} / ${r.stoppedUnits.evening} / ${r.stoppedUnits.night}`,
+                "Remark": r.remark
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(flattenedData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Handovers");
+            XLSX.writeFile(wb, `GIBE3_Shift_Handover_History.xlsx`);
+        }
+
+        // PRINT SINGLE REPORT FUNCTION
+        window.printSingleReport = function(id) {
+            const printContent = document.getElementById(`print-area-${id}`).innerHTML;
+            const originalContent = document.body.innerHTML;
+            
+            // Temporary structural swapping for print styles
+            document.body.innerHTML = `<div class="p-8 bg-white">${printContent}</div>`;
+            window.print();
+            // Restore window immediately
+            window.location.reload();
+        }
+
+        // SINGLE PDF REPORT EXPORT
+        window.exportSinglePDF = function(id) {
+            const element = document.getElementById(`print-area-${id}`);
+            // Temporarily hide action buttons on generation triggers
+            const actions = element.querySelector('.no-print');
+            actions.style.display = 'none';
+
+            const opt = {
+                margin:       [0.5, 0.5, 0.5, 0.5],
+                filename:     `Gibe3_Handover_Report_${id}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2 },
+                jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                actions.style.display = 'flex'; // restore UI
+            });
+        }
     </script>
+
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+        }
+    </style>
 </head>
-<body class="bg-gray-100 p-4 font-sans">
-    <div class="max-w-5xl mx-auto bg-white p-6 rounded-lg shadow-lg">
-        <h2 class="text-xl font-bold text-center text-blue-800 mb-2">GIBE 3 HYDRO POWER PLANT</h2>
-        <h3 class="text-md text-center font-semibold text-gray-600 mb-6">Real time operation shift taking-over form</h3>
-        
-        <form id="handoverForm" class="space-y-6">
-            <div class="flex items-center space-x-2">
-                <label class="font-bold">ቀን (Date):</label>
-                <input type="date" id="date" required class="border p-1 rounded">
-            </div>
+<body class="bg-slate-100 min-h-screen font-sans text-gray-800">
 
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse border border-gray-300">
-                    <thead>
-                        <tr class="bg-blue-800 text-white text-sm">
-                            <th class="border p-2 w-12 text-center">S.No</th>
-                            <th class="border p-2">Description / Information transferred</th>
-                            <th class="border p-2 text-center">Morning @13:00</th>
-                            <th class="border p-2 text-center">Evening @20:00</th>
-                            <th class="border p-2 text-center">Night @06:00</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-sm">
-                        <tr>
-                            <td class="border p-2 text-center">1</td>
-                            <td class="border p-2 font-semibold">Total plant loading</td>
-                            <td class="border p-1"><input type="text" id="load_m" class="w-full border p-1 rounded" required></td>
-                            <td class="border p-1"><input type="text" id="load_e" class="w-full border p-1 rounded" required></td>
-                            <td class="border p-1"><input type="text" id="load_n" class="w-full border p-1 rounded" required></td>
-                        </tr>
-                        <tr>
-                            <td class="border p-2 text-center">2</td>
-                            <td class="border p-2 font-semibold">No.of units in operation</td>
-                            <td class="border p-1"><input type="text" id="op_m" class="w-full border p-1 rounded" required></td>
-                            <td class="border p-1"><input type="text" id="op_e" class="w-full border p-1 rounded" required></td>
-                            <td class="border p-1"><input type="text" id="op_n" class="w-full border p-1 rounded" required></td>
-                        </tr>
-                        <tr>
-                            <td class="border p-2 text-center">3</td>
-                            <td class="border p-2 font-semibold">No.of units under maintenance</td>
-                            <td class="border p-1"><input type="text" id="maint_m" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="maint_e" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="maint_n" class="w-full border p-1 rounded"></td>
-                        </tr>
-                        <tr>
-                            <td class="border p-2 text-center">4</td>
-                            <td class="border p-2 font-semibold">Stopped units</td>
-                            <td class="border p-1"><input type="text" id="stop_m" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="stop_e" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="stop_n" class="w-full border p-1 rounded"></td>
-                        </tr>
-                        <tr>
-                            <td class="border p-2 text-center">5</td>
-                            <td class="border p-2 font-semibold">Bus-bar, overhead and outgoing lines</td>
-                            <td class="border p-1"><input type="text" id="bus_m" placeholder="Yes/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="bus_e" placeholder="Yes/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="bus_n" placeholder="Yes/Problem" class="w-full border p-1 rounded"></td>
-                        </tr>
-                        <tr>
-                            <td class="border p-2 text-center">6</td>
-                            <td class="border p-2 font-semibold">Stand by DG Condition</td>
-                            <td class="border p-1"><input type="text" id="dg_m" placeholder="Ready/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="dg_e" placeholder="Ready/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="dg_n" placeholder="Ready/Problem" class="w-full border p-1 rounded"></td>
-                        </tr>
-                        <tr>
-                            <td class="border p-2 text-center">7</td>
-                            <td class="border p-2 font-semibold">Plant DC system condition</td>
-                            <td class="border p-1"><input type="text" id="dc_m" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="dc_e" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="dc_n" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
-                        </tr>
-                        <tr>
-                            <td class="border p-2 text-center">8</td>
-                            <td class="border p-2 font-semibold">Conditions of SCADA & MIMIC</td>
-                            <td class="border p-1"><input type="text" id="scada_m" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="scada_e" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="scada_n" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
-                        </tr>
-                        <tr>
-                            <td class="border p-2 text-center">9</td>
-                            <td class="border p-2 font-semibold">PLC /fixed phone condition</td>
-                            <td class="border p-1"><input type="text" id="plc_m" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="plc_e" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="plc_n" placeholder="OK/Problem" class="w-full border p-1 rounded"></td>
-                        </tr>
-                        <tr>
-                            <td class="border p-2 text-center">10</td>
-                            <td class="border p-2 font-semibold">Availability of tools and utilities</td>
-                            <td class="border p-1"><input type="text" id="tools_m" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="tools_e" class="w-full border p-1 rounded"></td>
-                            <td class="border p-1"><input type="text" id="tools_n" class="w-full border p-1 rounded"></td>
-                        </tr>
-                    </tbody>
-                </table>
+    <div id="loginSection" class="max-w-md mx-auto mt-24 p-8 bg-white rounded-2xl shadow-xl border border-gray-100">
+        <div class="text-center mb-6">
+            <div class="bg-blue-600 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl mx-auto mb-3 shadow-lg">
+                <i class="fa fa-charging-station"></i>
             </div>
-
+            <h2 class="text-2xl font-bold text-gray-900">Gibe III Control Room</h2>
+            <p class="text-sm text-gray-500 mt-1">የፈረቃ ሪፖርት ሲስተም ለመጠቀም ይግቡ</p>
+        </div>
+        <form id="loginForm" class="space-y-4">
             <div>
-                <label class="block font-bold mb-1">11. Any remark which require the next group members:</label>
-                <textarea id="remark" class="w-full border p-2 rounded" rows="3"></textarea>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded border">
-                <div class="space-y-2">
-                    <h4 class="font-bold text-blue-700 border-b pb-1">Morning Shift</h4>
-                    <div><label class="text-xs">Attended By Name:</label><input type="text" id="m_att_name" class="w-full border p-1 text-sm rounded"></div>
-                    <div><label class="text-xs">Group:</label><input type="text" id="m_att_group" class="w-full border p-1 text-sm rounded"></div>
-                    <div><label class="text-xs">Addressed To Name:</label><input type="text" id="m_add_name" class="w-full border p-1 text-sm rounded"></div>
-                    <div><label class="text-xs">Group:</label><input type="text" id="m_add_group" class="w-full border p-1 text-sm rounded"></div>
-                </div>
-                <div class="space-y-2">
-                    <h4 class="font-bold text-blue-700 border-b pb-1">Evening Shift</h4>
-                    <div><label class="text-xs">Attended By Name:</label><input type="text" id="e_att_name" class="w-full border p-1 text-sm rounded"></div>
-                    <div><label class="text-xs">Group:</label><input type="text" id="e_att_group" class="w-full border p-1 text-sm rounded"></div>
-                    <div><label class="text-xs">Addressed To Name:</label><input type="text" id="e_add_name" class="w-full border p-1 text-sm rounded"></div>
-                    <div><label class="text-xs">Group:</label><input type="text" id="e_add_group" class="w-full border p-1 text-sm rounded"></div>
-                </div>
-                <div class="space-y-2">
-                    <h4 class="font-bold text-blue-700 border-b pb-1">Night Shift</h4>
-                    <div><label class="text-xs">Attended By Name:</label><input type="text" id="n_att_name" class="w-full border p-1 text-sm rounded"></div>
-                    <div><label class="text-xs">Group:</label><input type="text" id="n_att_group" class="w-full border p-1 text-sm rounded"></div>
-                    <div><label class="text-xs">Addressed To Name:</label><input type="text" id="n_add_name" class="w-full border p-1 text-sm rounded"></div>
-                    <div><label class="text-xs">Group:</label><input type="text" id="n_add_group" class="w-full border p-1 text-sm rounded"></div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">ኢሜይል (Email Address)</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400"><i class="fa fa-envelope"></i></span>
+                    <input type="email" id="loginEmail" required class="w-full pl-10 pr-3 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="name@gibe3.gov.et">
                 </div>
             </div>
-
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200">Submit Handover Report</button>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">የይለፍ ቃል (Password)</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400"><i class="fa fa-lock"></i></span>
+                    <input type="password" id="loginPassword" required class="w-full pl-10 pr-3 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="••••••••">
+                </div>
+            </div>
+            <p id="loginError" class="text-xs text-red-600 font-medium min-h-[15px]"></p>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl transition duration-200 shadow-md">ደህንነቱ በተጠበቀ ሁኔታ ይግቡ</button>
         </form>
+    </div>
 
-        <div class="mt-12">
-            <h3 class="text-lg font-bold text-gray-700 mb-4 border-b pb-2">Submitted Reports History (የተሞሉ ሪፖርቶች ታሪክ)</h3>
-            <div id="historyData" class="space-y-4">
-                <p class="text-gray-500 text-sm">Loading history...</p>
+    <div id="mainAppSection" class="max-w-6xl mx-auto py-8 px-4 hidden">
+        
+        <div class="bg-gradient-to-r from-blue-900 to-indigo-900 p-6 rounded-2xl text-white shadow-xl flex flex-col md:flex-row items-center justify-between mb-8">
+            <div class="mb-4 md:mb-0 text-center md:text-left">
+                <h1 class="text-2xl font-extrabold tracking-wide">GIBE III HYDRO POWER PLANT</h1>
+                <p id="formActionTitle" class="text-blue-200 text-sm font-medium mt-0.5">Real time operation shift taking-over form</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span id="userDisplay" class="text-xs bg-white/10 px-3 py-1.5 rounded-lg border border-white/10"></span>
+                <button id="logoutBtn" class="bg-red-600 hover:bg-red-700 px-4 py-1.5 rounded-lg text-xs font-bold transition shadow-md"><i class="fa fa-sign-out-alt mr-1"></i> ውጣ (Logout)</button>
             </div>
         </div>
+
+        <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 mb-10">
+            <div class="flex items-center justify-between mb-4 border-b pb-2">
+                <h3 class="text-lg font-bold text-gray-800"><i class="fa fa-wpforms text-blue-600 mr-2"></i>አዲስ የፈረቃ መረጃ መመዝገቢያ</h3>
+                <button type="button" id="cancelEditBtn" onclick="cancelEdit()" class="hidden bg-gray-500 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded shadow">ሰርዝ (Cancel Update)</button>
+            </div>
+
+            <form id="handoverForm" class="space-y-6">
+                <div class="flex items-center space-x-3 bg-gray-50 p-3 rounded-xl border max-w-xs">
+                    <label class="font-bold text-sm text-gray-700">ቀን (Date):</label>
+                    <input type="date" id="date" required class="border p-1.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+
+                <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-blue-800 text-white text-xs uppercase tracking-wider">
+                                <th class="border p-3 w-12 text-center">S.No</th>
+                                <th class="border p-3">Description / Information transferred</th>
+                                <th class="border p-3 text-center w-1/5 bg-blue-700">Morning @13:00</th>
+                                <th class="border p-3 text-center w-1/5 bg-orange-700">Evening @20:00</th>
+                                <th class="border p-3 text-center w-1/5 bg-purple-700">Night @06:00</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-sm divide-y">
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">1</td><td class="border p-3 font-semibold">Total plant loading (MW)</td><td class="border p-2"><input type="text" id="load_m" required class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="load_e" required class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="load_n" required class="w-full border p-1.5 rounded-md text-center"></td></tr>
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">2</td><td class="border p-3 font-semibold">No.of units in operation</td><td class="border p-2"><input type="text" id="op_m" required class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="op_e" required class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="op_n" required class="w-full border p-1.5 rounded-md text-center"></td></tr>
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">3</td><td class="border p-3 font-semibold">No.of units under maintenance</td><td class="border p-2"><input type="text" id="maint_m" class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="maint_e" class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="maint_n" class="w-full border p-1.5 rounded-md text-center"></td></tr>
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">4</td><td class="border p-3 font-semibold">Stopped units</td><td class="border p-2"><input type="text" id="stop_m" class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="stop_e" class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="stop_n" class="w-full border p-1.5 rounded-md text-center"></td></tr>
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">5</td><td class="border p-3 font-semibold">Bus-bar, overhead and outgoing lines</td><td class="border p-2"><input type="text" id="bus_m" placeholder="Yes/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="bus_e" placeholder="Yes/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="bus_n" placeholder="Yes/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td></tr>
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">6</td><td class="border p-3 font-semibold">Stand by DG Condition</td><td class="border p-2"><input type="text" id="dg_m" placeholder="Ready/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="dg_e" placeholder="Ready/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="dg_n" placeholder="Ready/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td></tr>
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">7</td><td class="border p-3 font-semibold">Plant DC system condition</td><td class="border p-2"><input type="text" id="dc_m" placeholder="OK/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="dc_e" placeholder="OK/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="dc_n" placeholder="OK/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td></tr>
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">8</td><td class="border p-3 font-semibold">Conditions of SCADA & MIMIC</td><td class="border p-2"><input type="text" id="scada_m" placeholder="OK/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="scada_e" placeholder="OK/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="scada_n" placeholder="OK/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td></tr>
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">9</td><td class="border p-3 font-semibold">PLC /fixed phone condition</td><td class="border p-2"><input type="text" id="plc_m" placeholder="OK/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="plc_e" placeholder="OK/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td><td class="border p-2"><input type="text" id="plc_n" placeholder="OK/Problem" class="w-full border p-1.5 rounded-md text-center text-xs"></td></tr>
+                            <tr class="hover:bg-slate-50"><td class="border p-3 text-center font-bold">10</td><td class="border p-3 font-semibold">Availability of tools and utilities</td><td class="border p-2"><input type="text" id="tools_m" class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="tools_e" class="w-full border p-1.5 rounded-md text-center"></td><td class="border p-2"><input type="text" id="tools_n" class="w-full border p-1.5 rounded-md text-center"></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div>
+                    <label class="block font-bold mb-1 text-sm text-gray-700">11. Any remark which require the next group members:</label>
+                    <textarea id="remark" class="w-full border p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" rows="3" placeholder="ለቀጣይ ፈረቃ የሚተላለፉ ልዩ ልዩ ትዕዛዞች ወይም ማሳሰቢያዎች እዚህ ይፃፉ..."></textarea>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-5 rounded-2xl border border-gray-200">
+                    <div class="space-y-2 bg-white p-3 rounded-xl border shadow-sm">
+                        <h4 class="font-bold text-blue-800 border-b pb-1 text-sm"><i class="fa fa-sun mr-1"></i> Morning Shift</h4>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Attended By Name:</label><input type="text" id="m_att_name" class="w-full border p-1 text-xs rounded"></div>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Group:</label><input type="text" id="m_att_group" class="w-full border p-1 text-xs rounded"></div>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Addressed To Name:</label><input type="text" id="m_add_name" class="w-full border p-1 text-xs rounded"></div>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Group:</label><input type="text" id="m_add_group" class="w-full border p-1 text-xs rounded"></div>
+                    </div>
+                    <div class="space-y-2 bg-white p-3 rounded-xl border shadow-sm">
+                        <h4 class="font-bold text-orange-700 border-b pb-1 text-sm"><i class="fa fa-cloud-sun mr-1"></i> Evening Shift</h4>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Attended By Name:</label><input type="text" id="e_att_name" class="w-full border p-1 text-xs rounded"></div>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Group:</label><input type="text" id="e_att_group" class="w-full border p-1 text-xs rounded"></div>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Addressed To Name:</label><input type="text" id="e_add_name" class="w-full border p-1 text-xs rounded"></div>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Group:</label><input type="text" id="e_add_group" class="w-full border p-1 text-xs rounded"></div>
+                    </div>
+                    <div class="space-y-2 bg-white p-3 rounded-xl border shadow-sm">
+                        <h4 class="font-bold text-purple-800 border-b pb-1 text-sm"><i class="fa fa-moon mr-1"></i> Night Shift</h4>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Attended By Name:</label><input type="text" id="n_att_name" class="w-full border p-1 text-xs rounded"></div>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Group:</label><input type="text" id="n_att_group" class="w-full border p-1 text-xs rounded"></div>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Addressed To Name:</label><input type="text" id="n_add_name" class="w-full border p-1 text-xs rounded"></div>
+                        <div><label class="text-[11px] font-semibold text-gray-500">Group:</label><input type="text" id="n_add_group" class="w-full border p-1 text-xs rounded"></div>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition duration-200 shadow-md transform hover:-translate-y-0.5"><i class="fa fa-save mr-2"></i> Submit Handover Report</button>
+            </form>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl shadow-md border border-gray-100 mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex flex-1 flex-col sm:flex-row gap-2 w-full">
+                <div class="relative flex-1">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400"><i class="fa fa-search"></i></span>
+                    <input type="text" id="searchBox" onkeyup="filterReports()" placeholder="በቀን፣ በአስተያየት ወይም በሰራተኛ ስም ይፈልጉ..." class="w-full pl-9 pr-3 py-1.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <input type="date" id="filterDate" onchange="filterReports()" class="border p-1.5 rounded-xl text-sm focus:outline-none text-gray-600">
+            </div>
+            
+            <button onclick="exportToExcel()" class="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow flex items-center justify-center gap-1.5">
+                <i class="fa fa-file-excel text-base"></i> ታሪክን በExcel አውርድ (.XLSX)
+            </button>
+        </div>
+
+        <div>
+            <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center"><i class="fa fa-history text-blue-600 mr-2"></i>የተሞሉ ሪፖርቶች ታሪክ (Submitted History)</h3>
+            <div id="historyData" class="space-y-4">
+                <p class="text-gray-500 text-sm animate-pulse"><i class="fa fa-spinner fa-spin mr-1"></i> መረጃዎች በመጫን ላይ ናቸው...</p>
+            </div>
+        </div>
+
     </div>
 </body>
 </html>
